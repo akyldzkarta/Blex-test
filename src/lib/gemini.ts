@@ -97,7 +97,8 @@ async function callGeminiRest(
   systemInstruction: string,
   turns: Turn[]
 ): Promise<string> {
-  const url = `${REST_BASE}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`
+  const path = `models/${encodeURIComponent(model)}:generateContent`
+  const url = `${REST_BASE}/${path}`
 
   const contents = turns.map((t) => ({
     role: t.role,
@@ -133,15 +134,30 @@ async function callGeminiRest(
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey,
+    },
     body: JSON.stringify(body),
   })
 
-  const data = (await res.json()) as RestErrorBody
+  const raw = await res.text()
+  let data: RestErrorBody
+  try {
+    data = JSON.parse(raw) as RestErrorBody
+  } catch {
+    throw new Error(
+      `Gemini API: geçersiz yanıt (${res.status}) ${raw.slice(0, 200)}`
+    )
+  }
 
   if (!res.ok) {
+    const code = data.error?.code
+    const status = data.error?.status
     const m = data.error?.message ?? `${res.status} ${res.statusText}`
-    throw new Error(`Gemini API: ${m}`)
+    throw new Error(
+      `Gemini API: ${m}${code != null ? ` [code ${code}${status ? ` ${status}` : ''}]` : ''}`
+    )
   }
 
   if (data.promptFeedback?.blockReason) {
