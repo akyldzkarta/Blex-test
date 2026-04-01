@@ -5,11 +5,18 @@ import path from 'path'
 let _systemPrompt: string | null = null
 
 function getSystemPrompt(): string {
-  if (!_systemPrompt) {
+  if (_systemPrompt) return _systemPrompt
+  try {
     _systemPrompt = fs.readFileSync(
       path.join(process.cwd(), 'AGENT_PROMPT.md'),
       'utf-8'
     )
+  } catch {
+    console.error(
+      '[openai] AGENT_PROMPT.md okunamadı (Vercel paketi?). Kısa yedek prompt kullanılıyor.'
+    )
+    _systemPrompt =
+      'You are Blex, a friendly dental clinic assistant. Reply briefly in the user language.'
   }
   return _systemPrompt
 }
@@ -21,7 +28,7 @@ export async function getAIResponse(
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
   const response = await openai.chat.completions.create({
-    model: 'gpt-4',
+    model: 'gpt-4o-mini',
     messages: [
       { role: 'system', content: getSystemPrompt() },
       ...history,

@@ -2,6 +2,9 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { sendWhatsAppMessage } from '@/lib/whatsapp'
 import { getAIResponse } from '@/lib/openai'
 
+/** Vercel Hobby: en fazla ~10s; Pro’da 60’a kadar çıkar. Yavaş model + soğuk başlangıçta yanıt yetişmezse süreyi yükselt. */
+export const maxDuration = 60
+
 // GET /api/webhook — Meta webhook verification challenge
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -102,7 +105,10 @@ export async function POST(request: Request) {
   try {
     await sendWhatsAppMessage(phoneNumber, aiText)
   } catch (err) {
-    console.error('[webhook] WhatsApp send error:', err)
+    console.error(
+      '[webhook] WhatsApp send error:',
+      err instanceof Error ? err.message : err
+    )
   }
 
   return Response.json({ status: 'ok' })
