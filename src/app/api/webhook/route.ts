@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { sendWhatsAppMessage } from '@/lib/whatsapp'
-import { getAIResponse } from '@/lib/openai'
+import { getGeminiResponse } from '@/lib/gemini'
 
 /** Vercel Hobby: en fazla ~10s; Pro’da 60’a kadar çıkar. Yavaş model + soğuk başlangıçta yanıt yetişmezse süreyi yükselt. */
 export const maxDuration = 60
@@ -83,10 +83,10 @@ export async function POST(request: Request) {
     console.error('[webhook] user message insert error:', userMsgErr)
   }
 
-  // 4. Get AI response from OpenAI GPT-4
+  // 4. AI yanıtı (Google Gemini)
   let aiText = ''
   try {
-    aiText = await getAIResponse(messageText, history)
+    aiText = await getGeminiResponse(messageText, history)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     const status =
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
         ? String((err as { status: unknown }).status)
         : ''
     console.error(
-      '[webhook] OpenAI error:',
+      '[webhook] Gemini error:',
       msg,
       status ? `http=${status}` : '',
       err
