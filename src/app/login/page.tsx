@@ -4,6 +4,25 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
+function networkErrorHint(original: string): string {
+  const m = original.toLowerCase()
+  if (
+    m.includes('failed to fetch') ||
+    m.includes('networkerror') ||
+    m.includes('load failed') ||
+    m.includes('network request failed')
+  ) {
+    return [
+      'Sunucuya ulaşılamıyor (Failed to fetch). Deneyebilecekleriniz:',
+      '• Geliştirme sunucusunu durdurup yeniden çalıştırın: npm run dev (.env.local kaydettikten sonra şart).',
+      '• Supabase projesinin Dashboard’da duraklatılmadığından emin olun.',
+      '• VPN, kurumsal ağ veya antivirüs HTTPS taramasını geçici kapatıp tekrar deneyin.',
+      '• Tarayıcıda gizli sekme veya reklam engelleyiciyi kapatın.',
+    ].join('\n')
+  }
+  return original
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
@@ -16,17 +35,26 @@ export default function LoginPage() {
     setError(null)
     setLoading(true)
 
-    const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    try {
+      const supabase = createClient()
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-    if (error) {
-      setError(error.message)
+      if (authError) {
+        setError(networkErrorHint(authError.message))
+        setLoading(false)
+        return
+      }
+
+      router.push('/dashboard')
+      router.refresh()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Bilinmeyen hata'
+      setError(networkErrorHint(msg))
       setLoading(false)
-      return
     }
-
-    router.push('/dashboard')
-    router.refresh()
   }
 
   return (
@@ -83,7 +111,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className="bg-red-950/50 border border-red-800/50 rounded-lg px-3 py-2.5 text-sm text-red-400">
+              <div className="bg-red-950/50 border border-red-800/50 rounded-lg px-3 py-2.5 text-sm text-red-400 whitespace-pre-line">
                 {error}
               </div>
             )}
