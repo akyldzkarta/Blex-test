@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import fs from 'fs'
 import path from 'path'
 
@@ -21,18 +20,25 @@ function getSystemPrompt(): string {
   return _systemPrompt
 }
 
-/** Önce env, yoksa yaygın modeller (API / bölge farkı için sırayla dene) */
+const REST_BASE =
+  'https://generativelanguage.googleapis.com/v1beta'
+
 function modelCandidates(): string[] {
   const fromEnv = process.env.GEMINI_MODEL?.trim()
-  /* 1.5-flash: AI Studio ücretsiz kotada genelde en sorunsuz */
-  const fallback = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro']
+  const fallback = [
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-001',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-latest',
+    'gemini-1.5-pro',
+  ]
   const list = fromEnv ? [fromEnv, ...fallback] : fallback
   return [...new Set(list)]
 }
 
 type Turn = { role: 'user' | 'model'; text: string }
 
-/** Gemini çoklu turda user/model sırası ister; üst üste aynı rolü birleştir. */
+/** Gemini çoklu tur: user/model sırası; üst üste aynı rol birleştirilir. */
 function mergeToTurns(
   history: Array<{ role: 'user' | 'assistant'; content: string }>,
   latestUserText: string
@@ -76,21 +82,80 @@ function mergeToTurns(
   return turns
 }
 
-function extractTextFromResponse(result: {
-  response: {
-    text: () => string
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+type RestErrorBody = {
+  error?: { code?: number; message?: string; status?: string }
+  promptFeedback?: { blockReason?: string }
+  candidates?: Array<{
+    content?: { parts?: Array<{ text?: string }> }
+    finishReason?: string
+  }>
+}
+
+async function callGeminiRest(
+  apiKey: string,
+  model: string,
+  systemInstruction: string,
+  turns: Turn[]
+): Promise<string> {
+  const url = `${REST_BASE}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`
+
+  const contents = turns.map((t) => ({
+    role: t.role,
+    parts: [{ text: t.text }],
+  }))
+
+  const body = {
+    systemInstruction: { parts: [{ text: systemInstruction }] },
+    contents,
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 1024,
+    },
+    safetySettings: [
+      {
+        category: 'HARM_CATEGORY_HARASSMENT',
+        threshold: 'BLOCK_ONLY_HIGH',
+      },
+      {
+        category: 'HARM_CATEGORY_HATE_SPEECH',
+        threshold: 'BLOCK_ONLY_HIGH',
+      },
+      {
+        category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+        threshold: 'BLOCK_ONLY_HIGH',
+      },
+      {
+        category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+        threshold: 'BLOCK_ONLY_HIGH',
+      },
+    ],
   }
-}): string {
-  try {
-    const t = result.response.text()
-    if (t?.trim()) return t
-  } catch {
-    /* safety block vb. */
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+  const data = (await res.json()) as RestErrorBody
+
+  if (!res.ok) {
+    const m = data.error?.message ?? `${res.status} ${res.statusText}`
+    throw new Error(`Gemini API: ${m}`)
   }
-  const parts = result.response.candidates?.[0]?.content?.parts
-  const joined = parts?.map((p) => p.text ?? '').join('') ?? ''
-  return joined.trim()
+
+  if (data.promptFeedback?.blockReason) {
+    throw new Error(`Gemini prompt engellendi: ${data.promptFeedback.blockReason}`)
+  }
+
+  const parts = data.candidates?.[0]?.content?.parts
+  const text = parts?.map((p) => p.text ?? '').join('') ?? ''
+  const trimmed = text.trim()
+  if (!trimmed) {
+    const fr = data.candidates?.[0]?.finishReason
+    throw new Error(`Gemini boş yanıt (finishReason: ${fr ?? 'yok'})`)
+  }
+  return trimmed
 }
 
 export async function getGeminiResponse(
@@ -100,36 +165,21 @@ export async function getGeminiResponse(
   const apiKey = process.env.GEMINI_API_KEY?.trim()
   if (!apiKey) {
     throw new Error(
-      'GEMINI_API_KEY tanımlı değil. Google AI Studio’dan anahtar alıp Vercel ve .env.local’a ekleyin.'
+      'GEMINI_API_KEY tanımlı değil. Google AI Studio anahtarını Vercel Environment Variables (Production) ve .env.local’a ekleyin; sonra Redeploy.'
     )
   }
 
   const turns = mergeToTurns(history, userMessage)
-  const contents = turns.map((t) => ({
-    role: t.role,
-    parts: [{ text: t.text }],
-  }))
-
-  const genAI = new GoogleGenerativeAI(apiKey)
   const systemInstruction = getSystemPrompt()
 
   let lastErr: unknown = null
   for (const modelName of modelCandidates()) {
     try {
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        systemInstruction,
-      })
-      const result = await model.generateContent({ contents })
-      const text = extractTextFromResponse(result)
-      if (text) {
-        return text
-      }
-      lastErr = new Error('Boş yanıt (içerik filtresi olabilir)')
+      return await callGeminiRest(apiKey, modelName, systemInstruction, turns)
     } catch (e) {
       lastErr = e
       const msg = e instanceof Error ? e.message : String(e)
-      console.warn('[gemini] model denemesi başarısız:', modelName, msg)
+      console.warn('[gemini] model başarısız:', modelName, msg)
     }
   }
 
