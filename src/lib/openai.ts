@@ -25,14 +25,33 @@ export async function getAIResponse(
   userMessage: string,
   history: Array<{ role: 'user' | 'assistant'; content: string }>
 ): Promise<string> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  const apiKey = process.env.OPENAI_API_KEY?.trim()
+  if (!apiKey) {
+    throw new Error(
+      'OPENAI_API_KEY tanımlı değil. Vercel → Settings → Environment Variables içine ekleyip yeniden deploy edin.'
+    )
+  }
+
+  const cleanHistory = history
+    .filter(
+      (m) =>
+        (m.role === 'user' || m.role === 'assistant') &&
+        typeof m.content === 'string' &&
+        m.content.trim().length > 0
+    )
+    .map((m) => ({
+      role: m.role,
+      content: m.content.trim(),
+    })) as Array<{ role: 'user' | 'assistant'; content: string }>
+
+  const openai = new OpenAI({ apiKey })
 
   const response = await openai.chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [
       { role: 'system', content: getSystemPrompt() },
-      ...history,
-      { role: 'user', content: userMessage },
+      ...cleanHistory,
+      { role: 'user', content: userMessage.trim() },
     ],
     max_tokens: 500,
     temperature: 0.7,

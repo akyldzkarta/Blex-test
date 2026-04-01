@@ -88,7 +88,17 @@ export async function POST(request: Request) {
   try {
     aiText = await getAIResponse(messageText, history)
   } catch (err) {
-    console.error('[webhook] OpenAI error:', err)
+    const msg = err instanceof Error ? err.message : String(err)
+    const status =
+      err && typeof err === 'object' && 'status' in err
+        ? String((err as { status: unknown }).status)
+        : ''
+    console.error(
+      '[webhook] OpenAI error:',
+      msg,
+      status ? `http=${status}` : '',
+      err
+    )
     aiText = "Thank you for reaching out! I'm experiencing a brief issue but will get back to you shortly."
   }
 
