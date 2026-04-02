@@ -21,12 +21,11 @@ function getSystemPrompt(): string {
 }
 
 const REST_BASE =
-  'https://generativelanguage.googleapis.com/v1beta'
+  'https://generativelanguage.googleapis.com/v1'
 
 function modelCandidates(): string[] {
   const fromEnv = process.env.GEMINI_MODEL?.trim()
   const fallback = [
-    'gemini-2.0-flash',
     'gemini-2.0-flash-001',
     'gemini-2.0-flash-lite',
     'gemini-1.5-flash',
