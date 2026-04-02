@@ -21,12 +21,18 @@ function getSystemPrompt(): string {
 }
 
 const REST_BASE =
-  'https://generativelanguage.googleapis.com/v1'
+  'https://generativelanguage.googleapis.com/v1beta'
 
 function modelCandidates(): string[] {
   const fromEnv = process.env.GEMINI_MODEL?.trim()
+  // Vercel’de /api/internal/test-gemini-models ile listelenenlerden seçtik:
+  // (liste dönen değerlerde "models/" prefix'i var; burada sadece "gemini-..." kullanıyoruz)
   const fallback = [
-    'gemini-1.5-flash',
+    'gemini-2.5-flash',
+    'gemini-flash-latest',
+    'gemini-pro-latest',
+    'gemini-2.5-pro',
+    'gemini-2.0-flash',
   ]
   const list = fromEnv ? [fromEnv, ...fallback] : fallback
   return [...new Set(list)]
