@@ -96,13 +96,20 @@ async function callGeminiRest(
   const path = `models/${encodeURIComponent(model)}:generateContent`
   const url = `${REST_BASE}/${path}`
 
-  const contents = turns.map((t) => ({
-    role: t.role,
-    parts: [{ text: t.text }],
-  }))
+  // systemInstruction bu REST endpoint’te ayrı alan olarak kabul edilmeyebiliyor.
+  // Bunun yerine system rolünü contents içine koyuyoruz.
+  const contents = [
+    {
+      role: 'system',
+      parts: [{ text: systemInstruction }],
+    },
+    ...turns.map((t) => ({
+      role: t.role,
+      parts: [{ text: t.text }],
+    })),
+  ]
 
   const body = {
-    systemInstruction: { parts: [{ text: systemInstruction }] },
     contents,
     generationConfig: {
       temperature: 0.7,
