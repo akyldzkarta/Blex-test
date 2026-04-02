@@ -26,10 +26,7 @@ const REST_BASE =
 function modelCandidates(): string[] {
   const fromEnv = process.env.GEMINI_MODEL?.trim()
   const fallback = [
-    'gemini-2.0-flash-001',
-    'gemini-2.0-flash-lite',
     'gemini-1.5-flash',
-    'gemini-1.5-flash-8b',
   ]
   const list = fromEnv ? [fromEnv, ...fallback] : fallback
   return [...new Set(list)]
