@@ -112,14 +112,14 @@ export async function POST(request: Request) {
   }
 
   // 6. Send reply via WhatsApp Cloud API
+  let waSendStatus = 'ok'
   try {
     await sendWhatsAppMessage(phoneNumber, aiText)
   } catch (err) {
-    console.error(
-      '[webhook] WhatsApp send error:',
-      err instanceof Error ? err.message : err
-    )
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[webhook] WhatsApp send error:', msg)
+    waSendStatus = msg
   }
 
-  return Response.json({ status: 'ok' })
+  return Response.json({ status: 'ok', waSendStatus })
 }
